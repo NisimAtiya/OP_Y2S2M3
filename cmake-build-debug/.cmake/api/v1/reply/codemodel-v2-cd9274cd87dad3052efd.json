@@ -1,0 +1,60 @@
+{
+	"configurations" : 
+	[
+		{
+			"directories" : 
+			[
+				{
+					"build" : ".",
+					"jsonFile" : "directory-.-Debug-f5ebdc15457944623624.json",
+					"minimumCMakeVersion" : 
+					{
+						"string" : "3.25"
+					},
+					"projectIndex" : 0,
+					"source" : ".",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"name" : "Debug",
+			"projects" : 
+			[
+				{
+					"directoryIndexes" : 
+					[
+						0
+					],
+					"name" : "OP_Y2S2M3",
+					"targetIndexes" : 
+					[
+						0
+					]
+				}
+			],
+			"targets" : 
+			[
+				{
+					"directoryIndex" : 0,
+					"id" : "OP_Y2S2M3::@6890427a1f51a3e7e1df",
+					"jsonFile" : "target-OP_Y2S2M3-Debug-e2d1d302de36282662f7.json",
+					"name" : "OP_Y2S2M3",
+					"projectIndex" : 0
+				}
+			]
+		}
+	],
+	"kind" : "codemodel",
+	"paths" : 
+	{
+		"build" : "/Users/nisimatiya/Desktop/\u05de\u05d3\u05e2\u05d9 \u05d4\u05de\u05d7\u05e9\u05d1/clion/Operating Systems/OP_Y2S2M3/OP_Y2S2M3/cmake-build-debug",
+		"source" : "/Users/nisimatiya/Desktop/\u05de\u05d3\u05e2\u05d9 \u05d4\u05de\u05d7\u05e9\u05d1/clion/Operating Systems/OP_Y2S2M3/OP_Y2S2M3"
+	},
+	"version" : 
+	{
+		"major" : 2,
+		"minor" : 4
+	}
+}
