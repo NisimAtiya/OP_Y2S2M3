@@ -74,7 +74,7 @@ void server_side(char *PORT) {
     pfds[0].fd = 0;          // Standard input
     pfds[0].events = POLLIN; // Tell me when ready to read
     pfds[0].revents = 0;
-    pfds[1].fd = server_socket;
+    pfds[1].fd = client_socket;
     pfds[1].events = POLLIN; // Tell me when ready to read
     pfds[1].revents = 0;
     while (1){
@@ -89,11 +89,11 @@ void server_side(char *PORT) {
             if(pfds[0].revents & POLLIN){
                 char msg[MAX_MSG_LEN];
                 fgets(msg, MAX_MSG_LEN, stdin);
-                send(server_socket, msg, strlen(msg), 0);
+                send(client_socket, msg, strlen(msg), 0);
             }
             if(pfds[1].revents & POLLIN){
                 char msg[MAX_MSG_LEN];
-                ssize_t n = recv(server_socket, msg, MAX_MSG_LEN, 0);
+                ssize_t n = recv(client_socket, msg, MAX_MSG_LEN, 0);
                 if (n <= 0){
                     printf("Disconnected from client\n");
                     break;
@@ -149,13 +149,11 @@ void client_side(char *IP, char *PORT) {
             continue;
         } else{
                 if(pfds[0].revents & POLLIN){
-                    printf("get input from terminal\n");
                     char msg[MAX_MSG_LEN];
                     fgets(msg, MAX_MSG_LEN, stdin);
                     send(client_socket, msg, strlen(msg), 0);
                 }
                 if(pfds[1].revents & POLLIN){
-                    printf("get input from server\n");
                     char msg[MAX_MSG_LEN];
                     ssize_t n = recv(client_socket, msg, MAX_MSG_LEN, 0);
                     if (n <= 0){
