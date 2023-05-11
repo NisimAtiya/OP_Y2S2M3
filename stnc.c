@@ -8,6 +8,8 @@
 #include <time.h>
 #include <sys/time.h>
 #include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
 
 #define MAX_MSG_LEN 1024
 
@@ -36,15 +38,15 @@ void client_ipv6_udp(char *ip, char *port);
 
 void server_ipv4_tcp(char* argv[]);
 
-void server_ipv4_udp();
+void server_ipv4_udp(char* argv[]);
 
-void server_ipv6_tcp();
+void server_ipv6_tcp(char* argv[]);
 
-void server_ipv6_udp();
+void server_ipv6_udp(char* argv[]);
 
-void server_uds_dgram();
+void server_uds_dgram(char* argv[]);
 
-void server_uds_stream();
+void server_uds_stream(char* argv[]);
 
 int main(int argc, char* argv[]){
 
@@ -271,6 +273,7 @@ unsigned char cecksum__(char *filename){
     return temp;
 }
 void client_p(char* argv[]){
+    printf("client_p\n");
     int client_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     if (client_socket < 0) {
@@ -282,7 +285,7 @@ void client_p(char* argv[]){
     memset(&server_address, 0, sizeof(server_address));
 
     server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = inet_addr(argv[2]);
+    server_address.sin_addr.s_addr = inet_addr("127.0.0.1");
     server_address.sin_port = htons(2727);
 
     if (connect(client_socket, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
@@ -330,7 +333,50 @@ void client_p(char* argv[]){
 }
 
 void client_ipv6_udp(char *ip, char *port) {
+    printf("client_ipv6_udp\n");
+    sleep(1);
+    int client_socket = socket(AF_INET6, SOCK_DGRAM, 0);
 
+    if (client_socket < 0) {
+        perror("Failed to create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    struct sockaddr_in6 server_address;
+    memset(&server_address, 0, sizeof(server_address));
+
+    server_address.sin6_family = AF_INET6;
+    inet_pton(AF_INET6, ip, &(server_address.sin6_addr));
+    server_address.sin6_port = htons(atoi(port));
+
+    generate_file();
+    char c;
+    c = cecksum__("large_file.txt");
+    if (sendto(client_socket, &c, sizeof(char), 0, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
+        perror("Failed to send data to server");
+        exit(EXIT_FAILURE);
+    }
+
+    // Open the file for reading
+    FILE *file = fopen("large_file.txt", "r");
+    if (file == NULL) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    char buffer[1024];
+    size_t bytes_read;
+    int bytes_sent;
+    socklen_t server_address_size = sizeof(server_address);
+    while ((bytes_read = fread(buffer, 1, 1024, file)) > 0) {
+        bytes_sent = sendto(client_socket, buffer, bytes_read, 0, (struct sockaddr*) &server_address, server_address_size);
+        if (bytes_sent < 0 || bytes_sent != bytes_read) {
+            perror("Failed to send data to server");
+            exit(EXIT_FAILURE);
+        }
+    }
+    fclose(file);
+    close(client_socket);
 }
 
 void client_ipv6_tcp(char *ip, char *port) {
@@ -380,7 +426,50 @@ void client_ipv6_tcp(char *ip, char *port) {
 
 
 void client_ipv4_udp(char *ip, char *port) {
+    printf("client_ipv4_udp\n");
+    sleep(1);
+    int client_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
+    if (client_socket < 0) {
+        perror("Failed to create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    struct sockaddr_in server_address;
+    memset(&server_address, 0, sizeof(server_address));
+
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = inet_addr(ip);
+    server_address.sin_port = htons(atoi(port));
+
+    generate_file();
+    char c;
+    c = cecksum__("large_file.txt");
+    if (sendto(client_socket, &c, sizeof(char), 0, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
+        perror("Failed to send data to server");
+        exit(EXIT_FAILURE);
+    }
+
+    // Open the file for reading
+    FILE *file = fopen("large_file.txt", "r");
+    if (file == NULL) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    char buffer[1024];
+    size_t bytes_read;
+    int bytes_sent;
+    socklen_t server_address_size = sizeof(server_address);
+    while ((bytes_read = fread(buffer, 1, 1024, file)) > 0) {
+        bytes_sent = sendto(client_socket, buffer, bytes_read, 0, (struct sockaddr*) &server_address, server_address_size);
+        if (bytes_sent < 0 || bytes_sent != bytes_read) {
+            perror("Failed to send data to server");
+            exit(EXIT_FAILURE);
+        }
+    }
+    fclose(file);
+    close(client_socket);
 }
 
 void client_ipv4_tcp(char *ip, char *port) {
@@ -398,6 +487,7 @@ void client_ipv4_tcp(char *ip, char *port) {
     server_address.sin_family = AF_INET;
     server_address.sin_addr.s_addr = inet_addr(ip);
     server_address.sin_port = htons(atoi(port));
+    printf("port : %d\n",server_address.sin_port);
 
     if (connect(client_socket, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
         perror("Failed to connect to server");
@@ -453,6 +543,7 @@ void client_uds_dgram() {
 
 
 void server_p(char* argv[],int q){
+    printf("server_p\n");
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server_socket < 0) {
@@ -496,32 +587,131 @@ void server_p(char* argv[],int q){
         server_ipv4_tcp(argv);
     }
     if(strcmp(buffer,"ipv4 udp")==0){
-        server_ipv4_udp();
+        server_ipv4_udp(argv);
     }
     if(strcmp(buffer,"ipv6 tcp")==0){
-        server_ipv6_tcp();
+        server_ipv6_tcp(argv);
     }
-    if(strcmp(buffer,"ipv6 udp")==0){
-        server_ipv6_udp();
+    if(strcmp(buffer,"ipv6 udp")== 0){
+        server_ipv6_udp(argv);
     }
     if(strcmp(buffer,"uds dgram")==0){
-        server_uds_dgram();
+        server_uds_dgram(argv);
     }
     if(strcmp(buffer,"uds stream")==0){
-        server_uds_stream();
+        server_uds_stream(argv);
     }
     close(server_socket);
 }
 
-void server_uds_stream() {
+void server_uds_stream(char* argv[]) {
 
 }
 
-void server_uds_dgram() {
+void server_uds_dgram(char* argv[]) {
 
 }
 
-void server_ipv6_udp() {
+void server_ipv6_udp(char* argv[]) {
+    printf("server_ipv6_udp\n");
+    int server_socket = socket(AF_INET6, SOCK_DGRAM, 0);
+    if (server_socket < 0) {
+        perror("Failed to create socket");
+        exit(EXIT_FAILURE);
+    }
+
+    struct sockaddr_in6 server_address, client_address;
+    memset(&server_address, 0, sizeof(server_address));
+    memset(&client_address, 0, sizeof(client_address));
+
+    server_address.sin6_family = AF_INET6;
+    server_address.sin6_addr = in6addr_any;
+    server_address.sin6_port = htons(atoi(argv[2]));
+
+    struct timeval timeout;
+    timeout.tv_sec = 3; // 5 seconds timeout
+    timeout.tv_usec = 0;
+
+    if (setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        perror("setsockopt failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (bind(server_socket, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
+        perror("Failed to bind socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Receive a check sum
+    char c;
+    socklen_t client_address_size = sizeof(client_address);
+    if (recvfrom(server_socket, &c, sizeof(char), 0, (struct sockaddr*) &client_address, &client_address_size) < 0) {
+        perror("Failed to receive data from client");
+        exit(EXIT_FAILURE);
+    }
+
+    // Open the file for writing
+    FILE *file = fopen("file_received.txt", "wb");
+    if (file == NULL) {
+        perror("Failed to create file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Receive the file data from the client and write it to the file
+    char buffer[1024];
+    ssize_t bytes_received;
+    struct timespec start_time, end_time;
+    double elapsed_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    while (1) {
+        if((bytes_received = recvfrom(server_socket, buffer, 1024, 0, (struct sockaddr*) &client_address, &client_address_size)) > 0){
+            if(strcmp(buffer,"end")==0) break;
+            if (fwrite(buffer, 1, bytes_received, file) != bytes_received) {
+                perror("Failed to write to file");
+                exit(EXIT_FAILURE);
+            }
+        }
+        if (bytes_received < 0){
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                break;
+            }else {
+                perror("recvfrom failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    fclose(file);
+    elapsed_time = (end_time.tv_sec - start_time.tv_sec - 3) * 1000.0 ; // seconds to milliseconds
+    elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1000000.0; // nanoseconds to milliseconds
+    struct stat file1_stat, file2_stat;
+    const char* file1_path = "file_received.txt";
+    const char* file2_path = "large_file.txt";
+    // Get the size of file1
+    if (stat(file1_path, &file1_stat) < 0) {
+        perror("Failed to get file1 size");
+        exit(EXIT_FAILURE);
+    }
+
+    // Get the size of file2
+    if (stat(file2_path, &file2_stat) < 0) {
+        perror("Failed to get file2 size");
+        exit(EXIT_FAILURE);
+    }
+    char c__;
+    c__ = cecksum__("file_received.txt");
+    // Compare the sizes of the files
+    if (file1_stat.st_size != file2_stat.st_size) {
+        printf("The data was not transferred successfully, so the test is not accurate\n");
+    }else if(c==c__){
+        printf("ipv4_udp,%f\n",elapsed_time);
+
+    } else{
+        printf("The data was not transferred successfully, so the test is not accurate\n");
+    }
+    // Close the file and the socket
+    close(server_socket);
+
 
 }
 
@@ -540,10 +730,7 @@ void server_ipv6_tcp(char* argv[]) {
     server_address.sin6_addr = in6addr_any;
     server_address.sin6_port = htons(atoi(argv[2]));
 
-    if (inet_pton(AF_INET6, argv[1], &server_address.sin6_addr) < 1) {
-        perror("Invalid address");
-        exit(EXIT_FAILURE);
-    }
+
 
     if (bind(server_socket, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
         perror("Failed to bind socket");
@@ -691,6 +878,105 @@ void server_ipv4_tcp(char* argv[]) {
 
 
 }
-void server_ipv4_udp() {
+void server_ipv4_udp(char* argv[]) {
+    printf("server_ipv4_udp\n");
+    int server_socket = socket(AF_INET, SOCK_DGRAM, 0);
+    if (server_socket < 0) {
+        perror("Failed to create socket");
+        exit(EXIT_FAILURE);
+    }
 
+    struct sockaddr_in server_address, client_address;
+    memset(&server_address, 0, sizeof(server_address));
+    memset(&client_address, 0, sizeof(client_address));
+
+    server_address.sin_family = AF_INET;
+    server_address.sin_addr.s_addr = INADDR_ANY;
+    server_address.sin_port = htons(atoi(argv[2]));
+    struct timeval timeout;
+    timeout.tv_sec = 3; // 5 seconds timeout
+    timeout.tv_usec = 0;
+
+    if (setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
+        perror("setsockopt failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (bind(server_socket, (struct sockaddr*) &server_address, sizeof(server_address)) < 0) {
+        perror("Failed to bind socket");
+        exit(EXIT_FAILURE);
+    }
+
+    // Receive a check sum
+    char c;
+    socklen_t client_address_size = sizeof(client_address);
+    if (recvfrom(server_socket, &c, sizeof(char), 0, (struct sockaddr*) &client_address, &client_address_size) < 0) {
+        perror("Failed to receive data from client");
+        exit(EXIT_FAILURE);
+    }
+
+    // Open the file for writing
+    FILE *file = fopen("file_received.txt", "wb");
+    if (file == NULL) {
+        perror("Failed to create file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Receive the file data from the client and write it to the file
+    char buffer[1024];
+    ssize_t bytes_received;
+    struct timespec start_time, end_time;
+    double elapsed_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    while (1) {
+        if((bytes_received = recvfrom(server_socket, buffer, 1024, 0, (struct sockaddr*) &client_address, &client_address_size)) > 0){
+            if(strcmp(buffer,"end")==0) break;
+            if (fwrite(buffer, 1, bytes_received, file) != bytes_received) {
+                perror("Failed to write to file");
+                exit(EXIT_FAILURE);
+            }
+        }
+        if (bytes_received < 0){
+            if (errno == EWOULDBLOCK || errno == EAGAIN) {
+                break;
+            }else {
+                perror("recvfrom failed");
+                exit(EXIT_FAILURE);
+            }
+        }
+
+
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    fclose(file);
+    elapsed_time = (end_time.tv_sec - start_time.tv_sec - 3) * 1000.0 ; // seconds to milliseconds
+    elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1000000.0; // nanoseconds to milliseconds
+    struct stat file1_stat, file2_stat;
+    const char* file1_path = "file_received.txt";
+    const char* file2_path = "large_file.txt";
+
+    // Get the size of file1
+    if (stat(file1_path, &file1_stat) < 0) {
+        perror("Failed to get file1 size");
+        exit(EXIT_FAILURE);
+    }
+
+    // Get the size of file2
+    if (stat(file2_path, &file2_stat) < 0) {
+        perror("Failed to get file2 size");
+        exit(EXIT_FAILURE);
+    }
+    char c__;
+    c__ = cecksum__("file_received.txt");
+    // Compare the sizes of the files
+    if (file1_stat.st_size != file2_stat.st_size) {
+        printf("The data was not transferred successfully, so the test is not accurate\n");
+    }else if(c==c__){
+        printf("ipv4_udp,%f\n",elapsed_time);
+
+    } else{
+        printf("The data was not transferred successfully, so the test is not accurate\n");
+    }
+    // Close the file and the socket
+    close(server_socket);
 }
