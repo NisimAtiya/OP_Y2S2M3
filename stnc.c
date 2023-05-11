@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/stat.h>
+#include <sys/un.h>
 
 #define MAX_MSG_LEN 1024
 
@@ -20,13 +21,13 @@ unsigned char cecksum__(char *filename);
 void client_p(char* argv[]);
 void server_p(char* argv[],int q);
 
-void client_uds_dgram();
+void client_uds_dgram(char* argv[]);
 
-void client_uds_stream();
+void client_uds_stream(char* argv[]);
 
-void client_mmap(char *filename);
+void client_mmap(char* argv[]);
 
-void client_pipe(char *filename);
+void client_pipe(char* argv[]);
 
 void client_ipv4_tcp(char *ip, char *port);
 
@@ -316,16 +317,16 @@ void client_p(char* argv[]){
     }
     if(strcmp(argv[5],"uds")==0){
         if(strcmp(argv[6],"dgram")==0){
-            client_uds_dgram();
+            client_uds_dgram(argv);
         } else{
-            client_uds_stream();
+            client_uds_stream(argv);
         }
     }
     if(strcmp(argv[5],"mmap")==0){
-        client_mmap(argv[6]);
+        client_mmap(argv);
     }
     if(strcmp(argv[5],"pipe")==0){
-        client_pipe(argv[6]);
+        client_pipe(argv);
     }
 
 
@@ -518,20 +519,65 @@ void client_ipv4_tcp(char *ip, char *port) {
     close(client_socket);
 }
 
-void client_pipe(char *filename) {
+void client_pipe(char* argv[]) {
 
 }
 
-void client_mmap(char *filename) {
+void client_mmap(char* argv[]) {
 
 }
 
-void client_uds_stream() {
+void client_uds_stream(char* argv[]) {
+
 
 }
+#define SOCK_PATH "./mysocket.sock"
 
-void client_uds_dgram() {
+void client_uds_dgram(char* argv[]){
+    printf("client_uds_dgram\n");
 
+    int sockfd, len;
+    struct sockaddr_un remote;
+    char buf[BUFSIZ];
+
+    // create a UDS datagram socket
+    if ((sockfd = socket(AF_UNIX, SOCK_DGRAM, 0)) == -1) {
+        perror("socket");
+        exit(1);
+    }
+
+    // set the remote address and length
+    remote.sun_family = AF_UNIX;
+    strcpy(remote.sun_path, SOCK_PATH);
+    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+
+    generate_file();
+    char c;
+    c = cecksum__("large_file.txt");
+    if (sendto(sockfd, &c, sizeof(c), 0, (struct sockaddr *)&remote, len) == -1) {
+        perror("sendto");
+        exit(1);
+    }
+
+    // open the file to be sent
+    FILE *fp;
+    if ((fp = fopen("large_file.txt", "rb")) == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+
+
+    // read the file data and send it to the remote socket
+    while (fgets(buf, BUFSIZ, fp) != NULL) {
+        if (sendto(sockfd, buf, strlen(buf), 0, (struct sockaddr *)&remote, len) == -1) {
+            perror("sendto");
+            exit(1);
+        }
+    }
+
+    // close the file and socket
+    fclose(fp);
+    close(sockfd);
 }
 
 
@@ -609,6 +655,100 @@ void server_uds_stream(char* argv[]) {
 }
 
 void server_uds_dgram(char* argv[]) {
+    printf("server_uds_dgram\n");
+
+    int sockfd, len;
+    struct sockaddr_un local, remote;
+    char buf[BUFSIZ];
+
+    // create a UDS datagram socket
+    if ((sockfd = socket(AF_UNIX, SOCK_DGRAM, 0)) == -1) {
+        perror("socket");
+        exit(1);
+    }
+
+    // bind the socket to a local address
+    local.sun_family = AF_UNIX;
+    strcpy(local.sun_path, SOCK_PATH);
+    unlink(local.sun_path);
+    len = strlen(local.sun_path) + sizeof(local.sun_family);
+    if (bind(sockfd, (struct sockaddr *)&local, len) == -1) {
+        perror("bind");
+        exit(1);
+    }
+    // set the timeout for the socket
+    struct timeval tv;
+    tv.tv_sec = 3;  // set the timeout to 3 seconds
+    tv.tv_usec = 0;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv, sizeof(tv)) == -1) {
+        perror("setsockopt");
+        exit(1);
+    }
+    // Receive a check sum
+    char c;
+    if (recvfrom(sockfd, &c, sizeof(c), 0, (struct sockaddr *)&remote, &len) == -1) {
+        perror("recvfrom");
+        exit(1);
+    }
+
+
+    // receive file data from the client and write it to a file
+    FILE *fp;
+    if ((fp = fopen("received_file.txt", "wb")) == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+    ssize_t bytes_received;
+    struct timespec start_time, end_time;
+    double elapsed_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    while (1) {
+        len = sizeof(remote);
+        if ((bytes_received = recvfrom(sockfd, buf, BUFSIZ - 1, 0, (struct sockaddr *)&remote, &len)) == -1) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                break;
+            } else {
+                perror("recvfrom");
+                exit(1);
+            }
+        }
+        if (fwrite(buf, 1, bytes_received, fp)!=bytes_received){
+            perror("Failed to write to file");
+            exit(EXIT_FAILURE);
+        }
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    fclose(fp);
+    elapsed_time = (end_time.tv_sec - start_time.tv_sec - 3) * 1000.0 ; // seconds to milliseconds
+    elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1000000.0; // nanoseconds to milliseconds
+    struct stat file1_stat, file2_stat;
+    const char* file1_path = "received_file.txt";
+    const char* file2_path = "large_file.txt";
+    // Get the size of file1
+    if (stat(file1_path, &file1_stat) < 0) {
+        perror("Failed to get file1 size");
+        exit(EXIT_FAILURE);
+    }
+
+    // Get the size of file2
+    if (stat(file2_path, &file2_stat) < 0) {
+        perror("Failed to get file2 size");
+        exit(EXIT_FAILURE);
+    }
+    char c__;
+    c__ = cecksum__("file_received.txt");
+    // Compare the sizes of the files
+    if (file1_stat.st_size != file2_stat.st_size) {
+        printf("The data was not transferred successfully, so the test is not accurate\n");
+    }else if(c==c__){
+        printf("ipv4_udp,%f\n",elapsed_time);
+
+    } else{
+        printf("The data was not transferred successfully, so the test is not accurate\n");
+    }
+
+    // close the socket
+    close(sockfd);
 
 }
 
@@ -629,7 +769,7 @@ void server_ipv6_udp(char* argv[]) {
     server_address.sin6_port = htons(atoi(argv[2]));
 
     struct timeval timeout;
-    timeout.tv_sec = 3; // 5 seconds timeout
+    timeout.tv_sec = 3; // 3 seconds timeout
     timeout.tv_usec = 0;
 
     if (setsockopt(server_socket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout)) < 0) {
