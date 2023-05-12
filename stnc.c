@@ -11,6 +11,16 @@
 #include <errno.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+
 
 #define MAX_MSG_LEN 1024
 #define SOCK_PATH "./mysocket.sock"
@@ -50,7 +60,12 @@ void server_uds_dgram(char* argv[]);
 
 void server_uds_stream(char* argv[]);
 
+void server_mmap(char *argv);
+
+void server_pipe(char *argv);
+
 int main(int argc, char* argv[]){
+
 
     if (argc > 7 || argc < 3) {
         printf("The usage for client is: stnc -c <IP PORT>\n");
@@ -521,10 +536,67 @@ void client_ipv4_tcp(char *ip, char *port) {
 }
 
 void client_pipe(char* argv[]) {
+    printf("client_pipe\n");
+
 
 }
 
 void client_mmap(char* argv[]) {
+    printf("client_mmap\n");
+    long file_size;
+    size_t result;
+
+
+    generate_file();
+    FILE *file = fopen("large_file.txt", "r");
+    if (file == NULL) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+    fseek(file, 0, SEEK_END);
+    file_size = ftell(file);
+    rewind(file);
+
+
+    char *buffer = (char *) malloc(sizeof(char) * file_size);
+
+    int fd = open(argv[6], O_RDWR | O_CREAT, 0666);
+    if (fd < 0) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Resize the file to the length of the data
+    if (ftruncate(fd, file_size) < 0) {
+        perror("Failed to resize file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Map the file to memory
+    char *ptr = mmap(NULL, file_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr == MAP_FAILED) {
+        perror("Failed to map file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Copy the file into the buffer
+    result = fread(buffer, 1, file_size, file);
+    if (result != file_size) {
+        perror("Failed to read file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Write the data to the mapped memory
+    memcpy(ptr, buffer, file_size);
+
+    // Unmap the memory and close the file
+    if (munmap(ptr, file_size) < 0) {
+        perror("Failed to unmap file");
+        exit(EXIT_FAILURE);
+    }
+    // Free the buffer
+    free(buffer);
+    close(fd);
 
 }
 
@@ -682,22 +754,101 @@ void server_p(char* argv[],int q){
     if(strcmp(buffer,"ipv4 tcp")==0){
         server_ipv4_tcp(argv);
     }
-    if(strcmp(buffer,"ipv4 udp")==0){
+    else if(strcmp(buffer,"ipv4 udp")==0){
         server_ipv4_udp(argv);
     }
-    if(strcmp(buffer,"ipv6 tcp")==0){
+    else if(strcmp(buffer,"ipv6 tcp")==0){
         server_ipv6_tcp(argv);
     }
-    if(strcmp(buffer,"ipv6 udp")== 0){
+    else if(strcmp(buffer,"ipv6 udp")== 0){
         server_ipv6_udp(argv);
     }
-    if(strcmp(buffer,"uds dgram")==0){
+    else if(strcmp(buffer,"uds dgram")==0){
         server_uds_dgram(argv);
     }
-    if(strcmp(buffer,"uds stream")==0){
+    else if(strcmp(buffer,"uds stream")==0){
         server_uds_stream(argv);
     }
+    char buffer2[20];
+    strcpy(buffer2, buffer + 5);
+    strncpy(buffer, buffer, 4);
+    buffer[4] = '\0'; // null-terminate the buffer
+    if(strcmp(buffer,"mmap")==0){
+        server_mmap(buffer2);
+    }
+    else if(strcmp(buffer,"pipe")==0){
+        server_pipe(buffer2);
+    }
+
     close(server_socket);
+}
+
+void server_pipe(char* argv) {
+    printf("server_pipe\n");
+
+}
+
+void server_mmap(char* argv) {
+    printf("server_mmap\n");
+    long file_size;
+    int fd;
+    char* buffer;
+    char* ptr;
+
+    fd = open(argv, O_RDWR | O_CREAT, 0666);
+    if (fd < 0) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Resize the file to the length of the data
+    if (ftruncate(fd, 104857600) < 0) {
+        perror("Failed to resize file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Map the file to memory
+    ptr = mmap(NULL, 104857600, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+    if (ptr == MAP_FAILED) {
+        perror("Failed to map file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Wait for the client to write data to the mapped memory
+    printf("Waiting for data from client...\n");
+    while (strlen(ptr) == 0) {
+        usleep(1000); // Sleep for 1ms
+    }
+
+    // Copy the data from the mapped memory to a buffer
+    file_size = strlen(ptr);
+    buffer = (char*)malloc(file_size * sizeof(char));
+    memcpy(buffer, ptr, file_size);
+
+    // receive file data from the client and write it to a file
+    FILE *fp;
+    if ((fp = fopen("received_file.txt", "wb")) == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+    ssize_t bytes_received;
+    struct timespec start_time, end_time;
+    double elapsed_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    // Write the buffer to disk
+    fwrite(buffer, file_size, 1, fp);
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    elapsed_time = (end_time.tv_sec - start_time.tv_sec ) * 1000.0 ; // seconds to milliseconds
+    elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1000000.0; // nanoseconds to milliseconds
+
+    // Unmap the memory and close the file
+    if (munmap(ptr, 104857600) < 0) {
+        perror("Failed to unmap file");
+        exit(EXIT_FAILURE);
+    }
+    close(fd);
+    free(buffer);
+    printf("mmap,%f\n",elapsed_time);
 }
 
 void server_uds_stream(char* argv[]) {
