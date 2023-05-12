@@ -536,9 +536,35 @@ void client_ipv4_tcp(char *ip, char *port) {
 }
 
 void client_pipe(char* argv[]) {
-    printf("client_pipe\n");
+    int fd;
+    char* buffer;
+    ssize_t bytes_read;
+    generate_file();
+    // Open the named pipe for writing
+    fd = open(argv[6], O_WRONLY);
+    if (fd < 0) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Read the file into a buffer
+    FILE *fp;
+    if ((fp = fopen("large_file.txt", "rb")) == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+    buffer = (char*)malloc(104857600);
+
+    bytes_read = fread(buffer, 1, 104857600, fp);
+
+    // Write the buffer to the named pipe
+    write(fd, buffer, bytes_read);
 
 
+    // Close the named pipe and file
+    close(fd);
+    fclose(fp);
+    free(buffer);
 }
 
 void client_mmap(char* argv[]) {
@@ -655,8 +681,8 @@ void client_uds_stream(char* argv[]){
 
 
 
+
 void client_uds_dgram(char* argv[]){
-    printf("client_uds_dgram\n");
 
     int sockfd, len;
     struct sockaddr_un remote;
@@ -784,8 +810,50 @@ void server_p(char* argv[],int q){
 }
 
 void server_pipe(char* argv) {
-    printf("server_pipe\n");
+    long file_size;
+    int fd;
+    char* buffer = malloc(104857600 * sizeof(char)); // Allocate memory for the buffer
+    ssize_t bytes_read;
 
+    // Create the named pipe
+    mkfifo(argv, 0666);
+
+    // Open the named pipe for reading
+    fd = open(argv, O_RDONLY);
+    if (fd < 0) {
+        perror("Failed to open file");
+        exit(EXIT_FAILURE);
+    }
+
+    // Wait for the client to write data to the named pipe
+    while ((bytes_read = read(fd, buffer, 104857600)) == 0) {
+        usleep(1000); // Sleep for 1ms
+    }
+
+    // receive file data from the client and write it to a file
+    FILE *fp;
+    if ((fp = fopen("received_file.txt", "wb")) == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+    struct timespec start_time, end_time;
+    double elapsed_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    // Write the buffer to disk
+    fwrite(buffer, bytes_read, 1, fp);
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    elapsed_time = (end_time.tv_sec - start_time.tv_sec ) * 1000.0 ; // seconds to milliseconds
+    elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1000000.0; // nanoseconds to milliseconds
+
+    // Close the named pipe and file
+    close(fd);
+    fclose(fp);
+    free(buffer);
+
+    // Remove the named pipe
+    unlink(argv);
+
+    printf("pipe,%f\n",elapsed_time);
 }
 
 void server_mmap(char* argv) {
@@ -906,7 +974,7 @@ void server_uds_stream(char* argv[]) {
     clock_gettime(CLOCK_MONOTONIC, &start_time);
     while (1) {
         if ((bytes_received = recv(client_fd, buf, BUFSIZ - 1, 0)) == 0) {
-             break;
+            break;
         }
         if (fwrite(buf, 1, bytes_received, fp)!=bytes_received){
             perror("Failed to write to file");
