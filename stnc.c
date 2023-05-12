@@ -13,6 +13,7 @@
 #include <sys/un.h>
 
 #define MAX_MSG_LEN 1024
+#define SOCK_PATH "./mysocket.sock"
 
 void client_side(char *IP, char *PORT);
 void server_side(char *PORT);
@@ -527,11 +528,60 @@ void client_mmap(char* argv[]) {
 
 }
 
-void client_uds_stream(char* argv[]) {
+void client_uds_stream(char* argv[]){
+    sleep(1);
+    printf("client_uds_stream\n");
 
+    int sockfd, len;
+    struct sockaddr_un remote;
+    char buf[BUFSIZ];
 
+    // create a UDS stream socket
+    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("socket");
+        exit(1);
+    }
+
+    // set the remote address and length
+    remote.sun_family = AF_UNIX;
+    strcpy(remote.sun_path, SOCK_PATH);
+    len = strlen(remote.sun_path) + sizeof(remote.sun_family);
+
+    // connect to the remote socket
+    if (connect(sockfd, (struct sockaddr *)&remote, len) == -1) {
+        perror("connect");
+        exit(1);
+    }
+
+    generate_file();
+    char c;
+    c = cecksum__("large_file.txt");
+    if (send(sockfd, &c, sizeof(c), 0) == -1) {
+        perror("send");
+        exit(1);
+    }
+
+    // open the file to be sent
+    FILE *fp;
+    if ((fp = fopen("large_file.txt", "rb")) == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+
+    // read the file data and send it to the remote socket
+    while (fgets(buf, BUFSIZ, fp) != NULL) {
+        if (send(sockfd, buf, strlen(buf), 0) == -1) {
+            perror("send");
+            exit(1);
+        }
+    }
+
+    // close the file and socket
+    fclose(fp);
+    close(sockfd);
 }
-#define SOCK_PATH "./mysocket.sock"
+
+
 
 void client_uds_dgram(char* argv[]){
     printf("client_uds_dgram\n");
@@ -651,8 +701,86 @@ void server_p(char* argv[],int q){
 }
 
 void server_uds_stream(char* argv[]) {
+    printf("server_uds_stream\n");
 
+    int sockfd, client_fd, len;
+    struct sockaddr_un local, remote;
+    char buf[BUFSIZ];
+
+    // create a UDS stream socket
+    if ((sockfd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1) {
+        perror("socket");
+        exit(1);
+    }
+
+    // bind the socket to a local address
+    local.sun_family = AF_UNIX;
+    strcpy(local.sun_path, SOCK_PATH);
+    unlink(local.sun_path);
+    len = strlen(local.sun_path) + sizeof(local.sun_family);
+    if (bind(sockfd, (struct sockaddr *)&local, len) == -1) {
+        perror("bind");
+        exit(1);
+    }
+
+    // listen for incoming connections
+    if (listen(sockfd, 5) == -1) {
+        perror("listen");
+        exit(1);
+    }
+
+    // accept the first incoming connection
+    len = sizeof(remote);
+    if ((client_fd = accept(sockfd, (struct sockaddr *)&remote, &len)) == -1) {
+        perror("accept");
+        exit(1);
+    }
+
+    // Receive a check sum
+    char c;
+    if (recv(client_fd, &c, sizeof(c), 0) == -1) {
+        perror("recv");
+        exit(1);
+    }
+
+    // receive file data from the client and write it to a file
+    FILE *fp;
+    if ((fp = fopen("received_file.txt", "wb")) == NULL) {
+        perror("fopen");
+        exit(1);
+    }
+    ssize_t bytes_received;
+    struct timespec start_time, end_time;
+    double elapsed_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    while (1) {
+        if ((bytes_received = recv(client_fd, buf, BUFSIZ - 1, 0)) == 0) {
+             break;
+        }
+        if (fwrite(buf, 1, bytes_received, fp)!=bytes_received){
+            perror("Failed to write to file");
+            exit(EXIT_FAILURE);
+        }
+    }
+    clock_gettime(CLOCK_MONOTONIC, &end_time);
+    elapsed_time = (end_time.tv_sec - start_time.tv_sec ) * 1000.0 ; // seconds to milliseconds
+    elapsed_time += (end_time.tv_nsec - start_time.tv_nsec) / 1000000.0; // nanoseconds to milliseconds
+
+    char c__;
+    c__ = cecksum__("received_file.txt");
+    // Compare the sizes of the files
+    if(c==c__){
+        printf("uds_stream,%f\n",elapsed_time);
+
+    } else{
+        printf("The data was not transferred successfully, so the test is not accurate\n");
+    }
+
+    // close the socket
+    fclose(fp);
+    close(sockfd);
 }
+
 
 void server_uds_dgram(char* argv[]) {
     printf("server_uds_dgram\n");
@@ -741,7 +869,7 @@ void server_uds_dgram(char* argv[]) {
     if (file1_stat.st_size != file2_stat.st_size) {
         printf("The data was not transferred successfully, so the test is not accurate\n");
     }else if(c==c__){
-        printf("ipv4_udp,%f\n",elapsed_time);
+        printf("uds_dgram,%f\n",elapsed_time);
 
     } else{
         printf("The data was not transferred successfully, so the test is not accurate\n");
