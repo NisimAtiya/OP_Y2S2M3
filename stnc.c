@@ -350,7 +350,6 @@ void client_p(char* argv[]){
 }
 
 void client_ipv6_udp(char *ip, char *port) {
-    printf("client_ipv6_udp\n");
     sleep(1);
     int client_socket = socket(AF_INET6, SOCK_DGRAM, 0);
 
@@ -443,7 +442,6 @@ void client_ipv6_tcp(char *ip, char *port) {
 
 
 void client_ipv4_udp(char *ip, char *port) {
-    printf("client_ipv4_udp\n");
     sleep(1);
     int client_socket = socket(AF_INET, SOCK_DGRAM, 0);
 
@@ -568,7 +566,6 @@ void client_pipe(char* argv[]) {
 }
 
 void client_mmap(char* argv[]) {
-    printf("client_mmap\n");
     long file_size;
     size_t result;
 
@@ -628,7 +625,6 @@ void client_mmap(char* argv[]) {
 
 void client_uds_stream(char* argv[]){
     sleep(1);
-    printf("client_uds_stream\n");
 
     int sockfd, len;
     struct sockaddr_un remote;
@@ -737,7 +733,6 @@ void client_uds_dgram(char* argv[]){
 
 
 void server_p(char* argv[],int q){
-    printf("server_p\n");
     int server_socket = socket(AF_INET, SOCK_STREAM, 0);
 
     if (server_socket < 0) {
@@ -857,7 +852,6 @@ void server_pipe(char* argv) {
 }
 
 void server_mmap(char* argv) {
-    printf("server_mmap\n");
     long file_size;
     int fd;
     char* buffer;
@@ -883,7 +877,6 @@ void server_mmap(char* argv) {
     }
 
     // Wait for the client to write data to the mapped memory
-    printf("Waiting for data from client...\n");
     while (strlen(ptr) == 0) {
         usleep(1000); // Sleep for 1ms
     }
@@ -920,7 +913,6 @@ void server_mmap(char* argv) {
 }
 
 void server_uds_stream(char* argv[]) {
-    printf("server_uds_stream\n");
 
     int sockfd, client_fd, len;
     struct sockaddr_un local, remote;
@@ -1002,7 +994,6 @@ void server_uds_stream(char* argv[]) {
 
 
 void server_uds_dgram(char* argv[]) {
-    printf("server_uds_dgram\n");
 
     int sockfd, len;
     struct sockaddr_un local, remote;
@@ -1100,7 +1091,6 @@ void server_uds_dgram(char* argv[]) {
 }
 
 void server_ipv6_udp(char* argv[]) {
-    printf("server_ipv6_udp\n");
     int server_socket = socket(AF_INET6, SOCK_DGRAM, 0);
     if (server_socket < 0) {
         perror("Failed to create socket");
@@ -1366,7 +1356,6 @@ void server_ipv4_tcp(char* argv[]) {
 
 }
 void server_ipv4_udp(char* argv[]) {
-    printf("server_ipv4_udp\n");
     int server_socket = socket(AF_INET, SOCK_DGRAM, 0);
     if (server_socket < 0) {
         perror("Failed to create socket");
